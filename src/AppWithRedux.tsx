@@ -48,6 +48,7 @@ function AppWithRedux() {
     }, [dispatch]);
 
     const changeTaskTitle = useCallback(function (id: string, newTitle: string, todolistId: string) {
+        debugger;
         const action = changeTaskTitleAC(id, newTitle, todolistId);
         dispatch(action);
     }, [dispatch]);
