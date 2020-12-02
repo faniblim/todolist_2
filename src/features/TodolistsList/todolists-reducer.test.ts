@@ -1,120 +1,89 @@
-import {AddTodolistActionType, RemoveTodolistActionType, SetTodolistsActionType} from './todolists-reducer'
-import {TaskPriorities, TaskStatuses, TaskType, todolistsAPI, UpdateTaskModelType} from '../../api/todolists-api'
-import {Dispatch} from 'redux'
-import {AppRootStateType} from '../../app/store'
+import {
+    addTodolistAC, changeTodolistEntityStatusAC,
+    changeTodolistFilterAC,
+    changeTodolistTitleAC, FilterValuesType,
+    removeTodolistAC, setTodolistsAC, TodolistDomainType,
+    todolistsReducer
+} from './todolists-reducer'
+import {v1} from 'uuid'
+import {TodolistType} from '../../api/todolists-api'
+import {RequestStatusType} from "../../app/app-reducer";
+import {action} from "@storybook/addon-actions";
 
-const initialState: TasksStateType = {}
+let todolistId1: string
+let todolistId2: string
+let startState: Array<TodolistDomainType> = []
 
-export const tasksReducer = (state: TasksStateType = initialState, action: ActionsType): TasksStateType => {
-    switch (action.type) {
-        case 'REMOVE-TASK':
-            return {...state, [action.todolistId]: state[action.todolistId].filter(t => t.id != action.taskId)}
-        case 'ADD-TASK':
-            return {...state, [action.task.todoListId]: [action.task, ...state[action.task.todoListId]]}
-        case 'UPDATE-TASK':
-            return {
-                ...state,
-                [action.todolistId]: state[action.todolistId]
-                    .map(t => t.id === action.taskId ? {...t, ...action.model} : t)
-            }
-        case 'ADD-TODOLIST':
-            return {...state, [action.todolist.id]: []}
-        case 'REMOVE-TODOLIST':
-            const copyState = {...state}
-            delete copyState[action.id]
-            return copyState
-        case 'SET-TODOLISTS': {
-            const copyState = {...state}
-            action.todolists.forEach(tl => {
-                copyState[tl.id] = []
-            })
-            return copyState
-        }
-        case 'SET-TASKS':
-            return {...state, [action.todolistId]: action.tasks}
-        default:
-            return state
-    }
-}
+beforeEach(() => {
+    todolistId1 = v1()
+    todolistId2 = v1()
+    startState = [
+        {id: todolistId1, title: 'What to learn', filter: 'all', entityStatus: 'idle', addedDate: '', order: 0},
+        {id: todolistId2, title: 'What to buy', filter: 'all', entityStatus: 'idle', addedDate: '', order: 0}
+    ]
+})
 
-// actions
-export const removeTaskAC = (taskId: string, todolistId: string) =>
-    ({type: 'REMOVE-TASK', taskId, todolistId} as const)
-export const addTaskAC = (task: TaskType) =>
-    ({type: 'ADD-TASK', task} as const)
-export const updateTaskAC = (taskId: string, model: UpdateDomainTaskModelType, todolistId: string) =>
-    ({type: 'UPDATE-TASK', model, todolistId, taskId} as const)
-export const setTasksAC = (tasks: Array<TaskType>, todolistId: string) =>
-    ({type: 'SET-TASKS', tasks, todolistId} as const)
+test('correct todolist should be removed', () => {
+    const endState = todolistsReducer(startState, removeTodolistAC(todolistId1))
 
-// thunks
-export const fetchTasksTC = (todolistId: string) => (dispatch: Dispatch<ActionsType>) => {
-    todolistsAPI.getTasks(todolistId)
-        .then((res) => {
-            const tasks = res.data.items
-            const action = setTasksAC(tasks, todolistId)
-            dispatch(action)
-        })
-}
-export const removeTaskTC = (taskId: string, todolistId: string) => (dispatch: Dispatch<ActionsType>) => {
-    todolistsAPI.deleteTask(todolistId, taskId)
-        .then(res => {
-            const action = removeTaskAC(taskId, todolistId)
-            dispatch(action)
-        })
-}
-export const addTaskTC = (title: string, todolistId: string) => (dispatch: Dispatch<ActionsType>) => {
-    todolistsAPI.createTask(todolistId, title)
-        .then(res => {
-            const task = res.data.data.item
-            const action = addTaskAC(task)
-            dispatch(action)
-        })
-}
-export const updateTaskTC = (taskId: string, domainModel: UpdateDomainTaskModelType, todolistId: string) =>
-    (dispatch: Dispatch<ActionsType>, getState: () => AppRootStateType) => {
-        const state = getState()
-        const task = state.tasks[todolistId].find(t => t.id === taskId)
-        if (!task) {
-            //throw new Error("task not found in the state");
-            console.warn('task not found in the state')
-            return
-        }
+    expect(endState.length).toBe(1)
+    expect(endState[0].id).toBe(todolistId2)
+})
 
-        const apiModel: UpdateTaskModelType = {
-            deadline: task.deadline,
-            description: task.description,
-            priority: task.priority,
-            startDate: task.startDate,
-            title: task.title,
-            status: task.status,
-            ...domainModel
-        }
-
-        todolistsAPI.updateTask(todolistId, taskId, apiModel)
-            .then(res => {
-                const action = updateTaskAC(taskId, domainModel, todolistId)
-                dispatch(action)
-            })
+test('correct todolist should be added', () => {
+    let todolist: TodolistType = {
+        title: 'New Todolist',
+        id: 'any id',
+        addedDate: '',
+        order: 0
     }
 
-// types
-export type UpdateDomainTaskModelType = {
-    title?: string
-    description?: string
-    status?: TaskStatuses
-    priority?: TaskPriorities
-    startDate?: string
-    deadline?: string
-}
-export type TasksStateType = {
-    [key: string]: Array<TaskType>
-}
-type ActionsType =
-    | ReturnType<typeof removeTaskAC>
-    | ReturnType<typeof addTaskAC>
-    | ReturnType<typeof updateTaskAC>
-    | AddTodolistActionType
-    | RemoveTodolistActionType
-    | SetTodolistsActionType
-    | ReturnType<typeof setTasksAC>
+
+    const endState = todolistsReducer(startState, addTodolistAC(todolist))
+
+    expect(endState.length).toBe(3)
+    expect(endState[0].title).toBe(todolist.title)
+    expect(endState[0].filter).toBe('all')
+})
+
+test('correct todolist should change its name', () => {
+    let newTodolistTitle = 'New Todolist'
+
+    const action = changeTodolistTitleAC(todolistId2, newTodolistTitle)
+
+    const endState = todolistsReducer(startState, action)
+
+    expect(endState[0].title).toBe('What to learn')
+    expect(endState[1].title).toBe(newTodolistTitle)
+})
+
+test('correct filter of todolist should be changed', () => {
+    let newFilter: FilterValuesType = 'completed'
+
+    const action = changeTodolistFilterAC(todolistId2, newFilter)
+
+    const endState = todolistsReducer(startState, action)
+
+    expect(endState[0].filter).toBe('all')
+    expect(endState[1].filter).toBe(newFilter)
+})
+test('todolists should be added', () => {
+
+    const action = setTodolistsAC(startState)
+
+    const endState = todolistsReducer([], action)
+
+    expect(endState.length).toBe(2)
+})
+
+test('correct entity status of todolist should be changed', () => {
+    let newStatus: RequestStatusType = 'loading'
+
+    const action = changeTodolistEntityStatusAC(todolistId2, newStatus)
+
+    const endState = todolistsReducer(startState, action)
+
+    expect(endState[0].entityStatus).toBe('idle')
+    expect(endState[1].entityStatus).toBe(newStatus)
+})
+
